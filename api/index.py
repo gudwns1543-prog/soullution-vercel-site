@@ -60,6 +60,23 @@ def _html(start_response, html, status="200 OK"):
     return [body]
 
 
+def _serve_home(start_response):
+    """Serve the 대표사이트 HTML even if Vercel routes / to this Python function."""
+    candidates = [
+        ROOT_DIR / "public" / "index.html",
+        ROOT_DIR / "index.html",
+        ROOT_DIR / "soullution_home.html",
+    ]
+    for fp in candidates:
+        if fp.exists():
+            return _html(start_response, fp.read_text(encoding="utf-8", errors="ignore"))
+    return _html(start_response, """<!doctype html><meta charset='utf-8'>
+    <div style='font-family:system-ui;padding:40px;line-height:1.7'>
+      <h1>솔루션 대표사이트 파일을 찾을 수 없습니다.</h1>
+      <p>public/index.html 파일이 배포에 포함되어 있는지 확인해 주세요.</p>
+    </div>""", "500 Internal Server Error")
+
+
 def _bytes(start_response, data, ctype="application/octet-stream", filename="notice-file"):
     _start(start_response, "200 OK", [
         ("Content-Type", ctype or "application/octet-stream"),
@@ -78,6 +95,11 @@ def app(environ, start_response):
     if method == "OPTIONS":
         _start(start_response, "204 No Content", [])
         return [b""]
+
+    # Some Vercel Python deployments route the site root (/) into api/index.py.
+    # In that case, return the homepage instead of a JSON 404.
+    if path in ("/", "/index.html") or not path.startswith("/api"):
+        return _serve_home(start_response)
 
     if path == "/api/health":
         return _json(start_response, {
